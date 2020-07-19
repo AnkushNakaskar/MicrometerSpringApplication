@@ -2,6 +2,7 @@ package com.spring.micrometer;
 
 import io.micrometer.core.annotation.Timed;
 import io.micrometer.core.instrument.Counter;
+import io.micrometer.core.instrument.DistributionSummary;
 import io.micrometer.core.instrument.MeterRegistry;
 import io.micrometer.core.instrument.Timer;
 import org.springframework.beans.factory.annotation.Autowired;
@@ -13,7 +14,9 @@ import org.springframework.web.bind.annotation.RestController;
 
 import javax.annotation.PostConstruct;
 import java.time.Duration;
+import java.util.Date;
 import java.util.Random;
+import java.util.concurrent.TimeUnit;
 import java.util.concurrent.atomic.AtomicInteger;
 
 @RestController
@@ -26,6 +29,8 @@ public class TestController {
     private Counter counter;
 
     private Timer register;
+
+    private DistributionSummary distribution;
 
     /*
     1.To Use the extra tags,We need to have the common tag configured with Meter registry in prometheus
@@ -40,6 +45,7 @@ public class TestController {
     public ResponseEntity<String> getTimed() {
 //        process();
         counter.increment();
+        processHistograme();
         return new ResponseEntity<>("Success", HttpStatus.OK);
     }
 
@@ -48,26 +54,28 @@ public class TestController {
 To enable the @Timed on methods,We need to has TimeAspect bean initialised which in MicrometerApplicationsApplication.java class
  */
 
-    @Scheduled(fixedRate = 6000)
-    @Timed(extraTags = {"region", "asia-east-1"})
     public void processHistograme() {
         final AtomicInteger count = new AtomicInteger(0);
-        raiseCounter();
-        register.record(() -> {
-            try {
-                int timeToSleep = Math.abs(new Random().nextInt(6000));
-                System.out.println("Timer record....!!! ::: "+count.incrementAndGet() +"  sleep :: "+timeToSleep);
-                Thread.sleep(timeToSleep);
-            } catch (InterruptedException e) {
-                e.printStackTrace();
-            }
-        });
+        long startTime = new Date().getTime();
+        try {
+            int timeToSleep = Math.abs(new Random().nextInt(6000));
+            System.out.println("Timer record....!!! ::: " + count.incrementAndGet() + "  sleep :: " + timeToSleep);
+            Thread.sleep(timeToSleep);
+        } catch (InterruptedException e) {
+            e.printStackTrace();
+        }
+
+        long endDate = new Date().getTime();
+
+
+        register.record(endDate - startTime, TimeUnit.MILLISECONDS);
+//        register.record(() -> {
+//        });
 
     }
 
     @PostConstruct
     public void raiseCounter() {
-        Counter.builder("counter_micro_meter_app").description("a description of what this counter does").baseUnit("ankush").tag("name", "value").register(meterRegistry).increment();
 
         register = Timer.builder("my.timer.ankush.histogram")
                 .publishPercentiles(0.5, 0.95) // median and 95th percentile
@@ -76,5 +84,18 @@ To enable the @Timed on methods,We need to has TimeAspect bean initialised which
                 .minimumExpectedValue(Duration.ofMillis(100))
                 .maximumExpectedValue(Duration.ofSeconds(10)).register(meterRegistry);
 
+    }
+
+    @PostConstruct
+    public void counter() {
+        counter = Counter.builder("counter_micro_meter_app").description("a description of what this counter does").baseUnit("ankush").tag("name", "value").register(meterRegistry);
+    }
+
+    @PostConstruct
+    public void distributionSummery() {
+        distribution = DistributionSummary.builder("my.ratio")
+                .scale(100)
+                .sla(70, 80, 90)
+                .register(meterRegistry);
     }
 }
